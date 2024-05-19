@@ -1,0 +1,38 @@
+from optimum.intel.openvino import OVWeightQuantizationConfig, OVModelForCasualLM
+from transformers import AutoTokenizer
+import argparse
+import time
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model-id', type=str,
+                        help='Model if in HuggingFace')
+    parser.add_argument('--int8', type=bool, default=False,
+                        help="Export in 8-bit format. Defaults to int4")
+    parser.add_argument('--export-path', type=str,
+                        help="Directory to export to")
+
+    sym = True
+    group_size = 128
+    args = parser.parse_args()
+    
+    model_name = args.model_id if args.model_id else "meta-llama/Meta-Llama3-8B-Instruct"
+    export_path = args.export_path if args.export_path else f"./models/{model_name}"
+    start = time.perf_counter()
+    if args.int8:
+        print("Loading in 8-bit")
+        start = time.perf_counter()
+        model = OVModelForCasualLM.from_pretrained(
+            model_name, export=True, load_in_8bit=True)
+    else:
+        print("Loading in 4-bit")
+        q_config = OVWeightQuantizationConfig(bits=4, sym=sym, group_size=group_size)
+        model = OVModelForCasualLM.from_pretrained(
+            model_name, export=True, quantization_config=q_config)
+    time_to_export_sec = time.perf_counter() - start
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    model.save_pretraiend(export_path)
+    tokenizer.save_pretrained(export_path)
+
+    print(f"Model {model_name} saved to {export_path} in {time_to_export_sec:.2f} seconds")
